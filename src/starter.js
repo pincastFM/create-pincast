@@ -12,6 +12,12 @@ const STARTER_ID = 'lantern-walk'
 const SET_ID = 'old-town-lanterns'
 export const TEST_PERSON = 'test_demo'
 
+// The example app's README predates test keys. template/ is rebuilt byte for byte from that repo, so a
+// fix made there would be lost at the next sync. Each new app's copy is corrected here instead. Once the
+// example drops the sentence, this replaces nothing.
+const OLD_KEY_LINE = 'Every Pincast key is live, so anything you write with one is real.'
+export const LIVE_KEY_LINE = 'A live key writes real data, and no API call deletes it.'
+
 // npm pack drops or rewrites these names, so the package stores them under another.
 const STORED = { '.gitignore': '_gitignore', '.env.example': '_env.example', 'package-lock.json': '_package-lock.json' }
 export const storedPath = file => join(root, 'template', STORED[file] ?? file)
@@ -104,7 +110,7 @@ export function firstRunCommands(base) {
  */
 export function addReadmeSection(target, { id, base, endsOn }) {
   const path = join(target, 'README.md')
-  const readme = readFileSync(path, 'utf8')
+  const readme = readFileSync(path, 'utf8').replace(OLD_KEY_LINE, () => LIVE_KEY_LINE)
   const anchor = '## Run it\n'
   if (readme.split(anchor).length !== 2) throw new Error('README anchor not found')
   const section = [

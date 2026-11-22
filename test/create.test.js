@@ -9,7 +9,7 @@ import { parseEnv } from 'node:util'
 import { API_ENV, apiBase, waitText } from '../src/api.js'
 import { run } from '../src/cli.js'
 import { COMMAND, PACKAGE_NAME } from '../src/name.js'
-import { manifest, storedPath } from '../src/starter.js'
+import { addReadmeSection, LIVE_KEY_LINE, manifest, storedPath } from '../src/starter.js'
 
 const ID = 'test-k3f7x2m4qa'
 const KEY = `pck_${ID}_rk_Mock0Secret0Mock0Secret0Mock0Secret0Mock0`
@@ -85,6 +85,26 @@ describe('a good answer', () => {
     assert.ok(!r.all.includes(KEY))
     assert.ok(!r.all.includes('Mock0Secret'))
     assert.ok(!readFileSync(join(app, 'README.md'), 'utf8').includes(CODE))
+  })
+
+  it('leaves out the starter README line that says every key is live', async () => {
+    assert.ok(readFileSync(storedPath('README.md'), 'utf8').includes('Every Pincast key is live'))
+    const base = await startApi(json(200, GOOD))
+    await create(base)
+    const readme = readFileSync(join(dir, 'app', 'README.md'), 'utf8')
+    assert.ok(!/every pincast key is live/i.test(readme))
+    assert.ok(readme.includes(`## Go live\n\n${LIVE_KEY_LINE} [Test and live](`))
+  })
+
+  it('still writes its README section once the example drops that line', () => {
+    const folder = join(dir, 'synced')
+    mkdirSync(folder)
+    writeFileSync(join(folder, 'README.md'), '# App\n\n## Run it\n\nSteps.\n\n## Go live\n\nA newer line.\n')
+    addReadmeSection(folder, { id: ID, base: GOOD.api, endsOn: '2026-11-29' })
+    const readme = readFileSync(join(folder, 'README.md'), 'utf8')
+    assert.ok(readme.includes('## Your test app'))
+    assert.ok(readme.includes('## Go live\n\nA newer line.\n'))
+    assert.ok(!readme.includes(LIVE_KEY_LINE))
   })
 
   it('makes one POST with no body and no Origin', async () => {
