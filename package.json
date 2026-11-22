@@ -1,0 +1,27 @@
+{
+  "name": "create-pincast",
+  "version": "0.1.0",
+  "description": "One command to a working Placecard app with its own test key.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "create-pincast": "bin/create-pincast.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "template",
+    "template.json"
+  ],
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "pincast",
+    "placecard",
+    "create"
+  ]
+}
