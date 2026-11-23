@@ -75,7 +75,8 @@ function refusal(status, text, retryAfter, base) {
     const wait = waitText(retryAfter)
     return code === 'test_apps_limit'
       ? new Stop(`Pincast has made all the test apps it makes in a day. Try again ${wait}.`)
-      : new Stop(`Too many test apps have come from this network. Try again ${wait}.`)
+      // The firewall's 429 carries no Retry-After, and its window is 10 minutes.
+      : new Stop(`Too many test apps have come from this network. Try again ${wait === 'later' ? 'in 10 minutes' : wait}.`)
   }
   if (status === 403 && code === 'browser_not_allowed') {
     return new Stop('Pincast refused this call as one from a web page. This command sends no Origin header, so a proxy or network tool probably added it. Try again from a plain terminal.')

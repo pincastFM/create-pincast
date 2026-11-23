@@ -392,6 +392,7 @@ describe('a refusal leaves nothing behind and calls once', () => {
   const cases = [
     ['429 test_apps_limit', json(429, { statusCode: 429, data: { code: 'test_apps_limit' } }, { 'Retry-After': '7200' }), /all the test apps.*about 2 hours/s],
     ['429 from the firewall', (req, res) => { res.writeHead(429, { 'Retry-After': '600' }); res.end('Too Many Requests') }, /this network.*about 10 minutes/s],
+    ['429 from the firewall, as Vercel sends it', json(429, { error: { code: '429', message: 'Too Many Requests' } }), /this network.*in 10 minutes/s],
     ['403 browser_not_allowed', json(403, { statusCode: 403, data: { code: 'browser_not_allowed' } }), /web page/],
     ['403 of another kind', json(403, { statusCode: 403 }), /refused the call \(403\)/],
     ['404', json(404, { statusCode: 404 }), /no test app service/],
