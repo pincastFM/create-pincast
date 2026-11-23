@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "One command to a working Placecard app with its own test key.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pincastFM/create-pincast.git"
+  },
   "type": "module",
   "bin": {
     "create-pincast": "bin/create-pincast.js"
