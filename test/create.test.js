@@ -9,7 +9,7 @@ import { parseEnv } from 'node:util'
 import { API_ENV, apiBase, waitText } from '../src/api.js'
 import { run } from '../src/cli.js'
 import { COMMAND, PACKAGE_NAME } from '../src/name.js'
-import { addReadmeSection, LIVE_KEY_LINE, manifest, storedPath } from '../src/starter.js'
+import { addReadmeSection, COLLECT_RETRY_KEY, FIRST_COLLECT, firstRunCommands, LIVE_KEY_LINE, manifest, storedPath } from '../src/starter.js'
 
 const ID = 'test-k3f7x2m4qa'
 const KEY = `pck_${ID}_rk_Mock0Secret0Mock0Secret0Mock0Secret0Mock0`
@@ -46,7 +46,20 @@ const json = (status, body, headers = {}) => (req, res) => {
   res.end(JSON.stringify(body))
 }
 
-const create = async (base, args = ['app']) => {
+// The two first-run answers, in the shapes the real PUT and collect routes send.
+const PUT_ANSWER = { app: ID, set: 'old-town-lanterns', name: 'Old Town', setCreated: true, cards: { created: 8, updated: 0, unchanged: 0, parentsSet: 0 }, active: { lantern: 8 } }
+const COLLECT_ANSWER = { collected: true, first: true, count: 1, collectedAt: '2026-11-22T15:04:05.123Z', card: { key: 'lantern:ferry-steps', type: 'lantern' }, parent: null }
+const SET_URL = '/v1/sets/old-town-lanterns'
+const COLLECT_URL = `${SET_URL}/collects`
+
+const goodApi = ({ put = json(200, PUT_ANSWER), post = json(200, COLLECT_ANSWER) } = {}) => (req, res) => {
+  if (req.method === 'POST' && req.url === '/v1/test-apps') return json(200, GOOD)(req, res)
+  if (req.method === 'PUT' && req.url === SET_URL) return put(req, res)
+  if (req.method === 'POST' && req.url === COLLECT_URL) return post(req, res)
+  return json(404, { statusCode: 404 })(req, res)
+}
+
+const create = async (base, args = ['app'], options = {}) => {
   let stdout = ''
   let stderr = ''
   const code = await run(args, {
@@ -54,6 +67,7 @@ const create = async (base, args = ['app']) => {
     cwd: dir,
     out: (t) => { stdout += t },
     err: (t) => { stderr += t },
+    ...options,
   })
   return { code, stdout, stderr, all: stdout + stderr }
 }
@@ -67,7 +81,7 @@ afterEach(async () => {
 
 describe('a good answer', () => {
   it('copies the starter, writes .env at 600, sets the id, and prints the link but never the key', async () => {
-    const base = await startApi(json(200, GOOD))
+    const base = await startApi(goodApi())
     const r = await create(base)
     assert.equal(r.code, 0, r.stderr)
     const app = join(dir, 'app')
@@ -89,7 +103,7 @@ describe('a good answer', () => {
 
   it('leaves out the starter README line that says every key is live', async () => {
     assert.ok(readFileSync(storedPath('README.md'), 'utf8').includes('Every Pincast key is live'))
-    const base = await startApi(json(200, GOOD))
+    const base = await startApi(goodApi())
     await create(base)
     const readme = readFileSync(join(dir, 'app', 'README.md'), 'utf8')
     assert.ok(!/every pincast key is live/i.test(readme))
@@ -107,10 +121,10 @@ describe('a good answer', () => {
     assert.ok(!readme.includes(LIVE_KEY_LINE))
   })
 
-  it('makes one POST with no body and no Origin', async () => {
-    const base = await startApi(json(200, GOOD))
+  it('makes one test app, with no body and no Origin', async () => {
+    const base = await startApi(goodApi())
     await create(base)
-    assert.equal(calls.length, 1)
+    assert.equal(calls.filter(c => c.url === '/v1/test-apps').length, 1)
     assert.equal(calls[0].method, 'POST')
     assert.equal(calls[0].url, '/v1/test-apps')
     assert.equal(calls[0].body, '')
@@ -119,7 +133,7 @@ describe('a good answer', () => {
   })
 
   it('moves every golden to the new id', async () => {
-    const base = await startApi(json(200, GOOD))
+    const base = await startApi(goodApi())
     await create(base)
     for (const file of Object.keys(manifest.files).filter(f => f.startsWith('test/goldens/'))) {
       const text = readFileSync(join(dir, 'app', file), 'utf8')
@@ -129,7 +143,7 @@ describe('a good answer', () => {
   })
 
   it('writes into an empty folder that already exists, and says so from inside it', async () => {
-    const base = await startApi(json(200, GOOD))
+    const base = await startApi(goodApi())
     const r = await create(base, ['.'])
     assert.equal(r.code, 0, r.stderr)
     assert.ok(existsSync(join(dir, '.env')))
@@ -137,10 +151,147 @@ describe('a good answer', () => {
   })
 
   it('quotes a folder name with a space in the cd line', async () => {
-    const base = await startApi(json(200, GOOD))
+    const base = await startApi(goodApi())
     const r = await create(base, ['my app'])
     assert.equal(r.code, 0, r.stderr)
     assert.ok(r.stdout.includes("cd 'my app'"))
+  })
+})
+
+describe('the first run', () => {
+  const madeApp = () => {
+    const app = join(dir, 'app')
+    assert.equal(parseEnv(readFileSync(join(app, '.env'), 'utf8')).PINCAST_KEY, KEY)
+    assert.match(readFileSync(join(app, 'shared/app.js'), 'utf8'), new RegExp(`id: '${ID}'`))
+    return readFileSync(join(app, 'README.md'), 'utf8')
+  }
+  const noKey = (r) => {
+    assert.ok(!r.all.includes(KEY))
+    assert.ok(!r.all.includes('Mock0Secret'))
+  }
+  const printed = (r, lines) => { for (const line of lines) assert.ok(r.stdout.includes(`  ${line}\n`), line) }
+
+  it('sends the set, then one collect, with the key in the header and nothing else of it', async () => {
+    const base = await startApi(goodApi())
+    const r = await create(base)
+    assert.equal(r.code, 0, r.stderr)
+    assert.deepEqual(calls.map(c => `${c.method} ${c.url}`), ['POST /v1/test-apps', `PUT ${SET_URL}`, `POST ${COLLECT_URL}`])
+    const [, put, post] = calls
+    assert.equal(put.body, readFileSync(storedPath('data/set.json'), 'utf8'))
+    assert.deepEqual(JSON.parse(post.body), FIRST_COLLECT)
+    for (const c of [put, post]) {
+      assert.equal(c.headers['x-pincast-key'], KEY)
+      assert.equal(c.headers['content-type'], 'application/json')
+      assert.equal(c.headers.origin, undefined)
+      assert.ok(!c.url.includes('pck_'))
+    }
+    assert.equal(put.headers['idempotency-key'], undefined)
+    assert.equal(post.headers['idempotency-key'], COLLECT_RETRY_KEY)
+    noKey(r)
+  })
+
+  it('on success prints no curl, and says the card is there', async () => {
+    const base = await startApi(goodApi())
+    const r = await create(base)
+    assert.ok(!r.stdout.includes('curl'))
+    assert.match(r.stdout, /Pincast has your set, and the test person test_demo holds Ferry Steps\./)
+    printed(r, ['cd app', 'npm ci', 'npm run dev'])
+    const readme = madeApp()
+    assert.ok(!readme.split('## Run it')[0].includes('curl'))
+    assert.match(readme, /already on Pincast/)
+  })
+
+  it('the printed collect is the body the command sent', () => {
+    const line = firstRunCommands('http://x/v1', 'collect').find(l => l.includes('-d '))
+    assert.deepEqual(JSON.parse(line.slice(line.indexOf("'") + 1, line.lastIndexOf("'"))), FIRST_COLLECT)
+    assert.ok(firstRunCommands('http://x/v1', 'collect').some(l => l.includes(`Idempotency-Key: ${COLLECT_RETRY_KEY}`)))
+    assert.ok(!firstRunCommands('http://x/v1', 'both').some(l => l.includes('Idempotency-Key')))
+    assert.deepEqual(firstRunCommands('http://x/v1', 'none'), [])
+  })
+
+  const failures = {
+    'a 500': json(500, { statusCode: 500 }),
+    'a 503 with no JSON': (req, res) => { res.writeHead(503); res.end('Service Unavailable') },
+    'a 401': json(401, { statusCode: 401, data: { code: 'key_missing' } }),
+    'a 403 that quotes the key': json(403, { statusCode: 403, message: `Invalid key ${KEY}`, data: { code: 'key_invalid', fix: KEY } }),
+    'a 404': json(404, { statusCode: 404 }),
+    'a 409': json(409, { statusCode: 409, data: { code: 'test_limit_reached' } }),
+    'a 429': json(429, { statusCode: 429, data: { code: 'rate_limited' } }, { 'Retry-After': '30' }),
+    'a redirect': (req, res) => { res.writeHead(307, { Location: '/v1/elsewhere' }); res.end() },
+    'a dropped connection': (req) => { req.socket.destroy() },
+    'a 200 that is not JSON and quotes the key': (req, res) => { res.writeHead(200); res.end(`<html>${KEY}`) },
+    'a 200 for something else': json(200, { ok: true }),
+    'no answer at all': () => {},
+    'an answer that stalls halfway': (req, res) => { res.writeHead(200, { 'Content-Length': '100' }); res.write('{"app":') },
+  }
+
+  for (const [name, handler] of Object.entries(failures)) {
+    it(`the set fails with ${name}: the app is made, exit 0, both commands, no collect`, async () => {
+      const base = await startApi(goodApi({ put: handler }))
+      const r = await create(base, ['app'], { firstRunTimeoutMs: 200 })
+      assert.equal(r.code, 0, r.stderr)
+      assert.equal(r.stderr, '')
+      assert.equal(calls.filter(c => c.url === COLLECT_URL).length, 0)
+      assert.equal(calls.filter(c => c.url === SET_URL).length, 1)
+      assert.ok(!calls.some(c => c.url === '/v1/elsewhere'))
+      printed(r, ['npm ci', ...firstRunCommands(base, 'both'), 'npm run dev'])
+      assert.match(r.stdout, /didn't confirm your set/)
+      const readme = madeApp()
+      for (const line of firstRunCommands(base, 'both')) assert.ok(readme.includes(line), line)
+      noKey(r)
+    })
+
+    it(`the collect fails with ${name}: the app is made, exit 0, only the collect`, async () => {
+      const base = await startApi(goodApi({ post: handler }))
+      const r = await create(base, ['app'], { firstRunTimeoutMs: 200 })
+      assert.equal(r.code, 0, r.stderr)
+      assert.equal(r.stderr, '')
+      assert.equal(calls.filter(c => c.url === COLLECT_URL).length, 1)
+      assert.ok(!calls.some(c => c.url === '/v1/elsewhere'))
+      printed(r, ['npm ci', ...firstRunCommands(base, 'collect'), 'npm run dev'])
+      assert.ok(!r.stdout.includes('curl -X PUT'))
+      assert.match(r.stdout, /Pincast has your set but didn't confirm the first collect/)
+      const readme = madeApp()
+      assert.ok(readme.includes(`Idempotency-Key: ${COLLECT_RETRY_KEY}`))
+      assert.ok(!readme.split('## Run it')[0].includes('curl -X PUT'))
+      noKey(r)
+    })
+  }
+
+  it('an unreachable host after the app is made: exit 0, both commands', async () => {
+    const base = await startApi((req, res) => {
+      res.on('finish', () => {
+        const closing = server
+        server = null
+        closing.close()
+        closing.closeAllConnections()
+      })
+      json(200, GOOD)(req, res)
+    })
+    const r = await create(base)
+    assert.equal(r.code, 0, r.stderr)
+    printed(r, firstRunCommands(base, 'both'))
+    assert.match(r.stdout, /the connection failed/)
+    madeApp()
+    noKey(r)
+  })
+
+  it('says how long it waited on a timeout', async () => {
+    const base = await startApi(goodApi({ put: () => {} }))
+    const r = await create(base, ['app'], { firstRunTimeoutMs: 1000 })
+    assert.equal(r.code, 0)
+    assert.match(r.stdout, /no answer in 1 second\)/)
+  })
+
+  it('Ctrl-C during the calls keeps the app, prints the steps and the link, and exits 130', async () => {
+    const base = await startApi(goodApi({ put: () => { setImmediate(() => process.emit('SIGINT')) } }))
+    const r = await create(base)
+    assert.equal(r.code, 130)
+    assert.ok(r.stdout.includes(CLAIM))
+    printed(r, firstRunCommands(base, 'both'))
+    assert.equal(process.listenerCount('SIGINT'), 0)
+    madeApp()
+    noKey(r)
   })
 })
 
