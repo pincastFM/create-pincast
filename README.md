@@ -10,7 +10,7 @@ You need Node 20.12 or later. The folder has to be new or empty. Leave its name 
 
 ## What it does
 
-1. Copies a small starter app, Lantern Walk, from inside this package. Nothing is downloaded from GitHub, and `template.json` records the commit it came from.
+1. Copies a small starter app, Lantern Walk. It comes inside `@pincast/cli`, the one package this one installs, so nothing is downloaded from GitHub. That package's `template.json` records the commit it came from.
 2. Asks Pincast for one test app.
 3. Writes your key to `.env`, which only your account can read and git ignores, along with the test person `test_demo` and your claim link.
 4. Puts the new app's id in `shared/app.js`.
@@ -35,17 +35,24 @@ If the set or the collect doesn't go through, you still get your app. The comman
 
 ## Working on this package
 
+From 0.2.0 on, this package is a shim. The command's code, its starter app and its text are in `@pincast/cli`, and the `pincast init` command there runs the same code. This package gives it the name `npm create pincast`, and depends on one exact version of `@pincast/cli`.
+
 ```sh
+npm install
 npm test
 ```
 
 The tests run against a local stand-in for the API and never reach Pincast. Set `PINCAST_CREATE_API` to point the command at another address.
 
-To move the starter to a newer commit of the example app:
+To move the starter to a newer commit of the example app, sync it in `@pincast/cli` and release that, then move this package's pin to the new version. [RELEASING.md](RELEASING.md) has the steps, and [CHANGELOG.md](CHANGELOG.md) lists what each release changed.
 
-```sh
-node scripts/sync-template.js <path to pincast-kit-example> <commit>
-```
+## Versions
+
+- **Patch** (0.2.0 to 0.2.1): a fix, or a change a script can't see, such as clearer text.
+- **Minor** (0.2.1 to 0.3.0): something new, and everything that worked still works.
+- **Major** (0.3.0 to 1.0.0): something that worked can stop working, such as an exit code that changes meaning or a higher lowest Node version.
+
+A release that moves the `@pincast/cli` pin takes the larger of the two changes. While the version starts with 0, a range like `^0.2.0` takes patches only.
 
 ## License
 

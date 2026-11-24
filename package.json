@@ -1,11 +1,15 @@
 {
   "name": "create-pincast",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "One command to a working Placecard app with its own test key.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/pincastFM/create-pincast.git"
+  },
+  "homepage": "https://github.com/pincastFM/create-pincast#readme",
+  "bugs": {
+    "url": "https://github.com/pincastFM/create-pincast/issues"
   },
   "type": "module",
   "bin": {
@@ -13,15 +17,22 @@
   },
   "files": [
     "bin",
-    "src",
-    "template",
-    "template.json"
+    "src"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "engines": {
     "node": ">=20.12"
   },
+  "dependencies": {
+    "@pincast/cli": "0.1.0"
+  },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "link-cli": "node scripts/link-cli.mjs",
+    "changelog": "node scripts/changelog.mjs"
   },
   "keywords": [
     "pincast",

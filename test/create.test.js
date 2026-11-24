@@ -6,10 +6,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, it } from 'node:test'
 import { parseEnv } from 'node:util'
-import { API_ENV, apiBase, waitText } from '../src/api.js'
+import { addReadmeSection, API_ENV, apiBase, COLLECT_RETRY_KEY, FIRST_COLLECT, firstRunCommands, LIVE_KEY_LINE, manifest, storedPath, waitText } from '@pincast/cli/init'
 import { run } from '../src/cli.js'
 import { COMMAND, PACKAGE_NAME } from '../src/name.js'
-import { addReadmeSection, COLLECT_RETRY_KEY, FIRST_COLLECT, firstRunCommands, LIVE_KEY_LINE, manifest, storedPath } from '../src/starter.js'
 
 const ID = 'test-k3f7x2m4qa'
 const KEY = `pck_${ID}_rk_Mock0Secret0Mock0Secret0Mock0Secret0Mock0`
@@ -114,7 +113,7 @@ describe('a good answer', () => {
     const folder = join(dir, 'synced')
     mkdirSync(folder)
     writeFileSync(join(folder, 'README.md'), '# App\n\n## Run it\n\nSteps.\n\n## Go live\n\nA newer line.\n')
-    addReadmeSection(folder, { id: ID, base: GOOD.api, endsOn: '2026-11-29' })
+    addReadmeSection(folder, { id: ID, base: GOOD.api, endsOn: '2026-11-29', command: COMMAND })
     const readme = readFileSync(join(folder, 'README.md'), 'utf8')
     assert.ok(readme.includes('## Your test app'))
     assert.ok(readme.includes('## Go live\n\nA newer line.\n'))
@@ -513,7 +512,10 @@ describe('the package', () => {
     assert.ok(readFileSync(new URL('../README.md', import.meta.url), 'utf8').includes(COMMAND))
   })
 
-  it('has no runtime dependencies', () => assert.equal(pkg.dependencies, undefined))
+  it('depends on @pincast/cli alone, at an exact version', () => {
+    assert.deepEqual(Object.keys(pkg.dependencies), ['@pincast/cli'])
+    assert.match(pkg.dependencies['@pincast/cli'], /^\d+\.\d+\.\d+$/)
+  })
 
   it('records the commit, and its files match their hashes', () => {
     assert.match(manifest.commit, /^192ebea[0-9a-f]{33}$/)
